@@ -5441,6 +5441,11 @@ c
          dtdzf(1)=(289.5-287.51)/(128.0-70.0)
          dtdzf(2)=(0.0094-0.0098)/(128.0-70.0)
 
+         elseif (icase.eq.7) then !Rodrigo's idealized cases
+
+         dtdzf(1) = 3.6/100.0 ! FA gradient used in sr. random
+         !dtdzf(2) is set by RH gradient in sr. random
+
          end if
 
          dtjump  = 0.0
@@ -5886,7 +5891,7 @@ c
  
       real ::  psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
-     +     vyy(nnx,iys:iye,izs:izs),Ttmp
+     +     vyy(nnx,iys:iye,izs:izs)
 
       real :: ampv,ampt,sum_psi,vmaxx,vmag,facv,ran1
 
@@ -5897,6 +5902,10 @@ c
       real :: t_surf,q_surf,u_surf,v_surf
       real :: t_temp,q_temp,u_temp,v_temp
       real :: q_top,t_top,u_top,v_top,slope_q1,slope_q2
+ 
+      ! for Rodrigo's icase 7
+      real :: dtdz_BL,ampRH,dRHdzFA,RHlocal
+      real :: Ttmp,rhoa,exner,func_p_base,mod_magnus
 
       integer :: ix,iy,iz
       integer :: idum
@@ -6199,7 +6208,89 @@ c                 qv
             enddo
             enddo
      
-      else  !switch the case
+      elseif (icase.eq.7) then
+      !Rodrigo's idealized cases
+
+          ! inversion height used in all profiles
+          z_switch = 70.0
+          
+          ! potential temperature structure
+          t_surf = 280.0
+          dtdz_BL = 0.0
+          t_switch = t_surf+dtdz_BL*z_switch
+
+          ! specific humidity is prescribed in terms of RH
+          ampRH = 0.003    ! max SS within BL (mult. by 100 for %)
+          dRHdzFA = 0.003  ! RH slope above BL (mult. by 100 for %)
+             
+          do iz=izs,ize
+
+            do iy=iys,iye
+            do ix=1,nnx
+              u(ix,iy,iz) = ugcont
+              v(ix,iy,iz) = vgcont
+              w(ix,iy,iz) = 0.0
+              e(ix,iy,iz) = 0.0
+              ! not sure if these are necessary
+              r1(ix,iy,iz)  = 0.0
+              r2(ix,iy,iz)  = 0.0
+              r3(ix,iy,iz)  = 0.0
+              r4(ix,iy,1,iz)= 0.0
+              r4(ix,iy,2,iz)= 0.0
+              r5(ix,iy,iz)  = 0.0
+            enddo
+            enddo
+
+            if(zz(iz) .le. z_switch) then
+              RHlocal=(surf_RH/100.0)-ampRH*sin(pi2*zz(iz)/z_switch)
+              do iy=iys,iye
+              do ix=1,nnx
+                t(ix,iy,1,iz) = t_surf + dtdz_BL*zz(iz)
+                if (iexner .eq. 1) then
+                  Ttmp = t(ix,iy,1,iz)*
+     +            exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+                  rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
+                else
+                  Ttmp = t(ix,iy,1,iz)
+                  rhoa = surf_rho
+                end if
+                t(ix,iy,2,iz)=RHlocal*Mw/Ru/Ttmp*mod_magnus(Ttmp)/rhoa
+              enddo
+              enddo
+            elseif(zz(iz) .ge. z_switch) then
+              RHlocal=(surf_RH/100.0)-dRHdzFA*(zz(iz)-z_switch)
+              do iy=iys,iye
+              do ix=1,nnx
+                t(ix,iy,1,iz) = t_switch + (zz(iz) - z_switch)*dtdzf(1)
+                if (iexner .eq. 1) then
+                  Ttmp = t(ix,iy,1,iz)*
+     +            exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+                  rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
+                else
+                  Ttmp = t(ix,iy,1,iz)
+                  rhoa = surf_rho
+                end if
+                t(ix,iy,2,iz)=RHlocal*Mw/Ru/Ttmp*mod_magnus(Ttmp)/rhoa
+              enddo
+              enddo
+            endif
+
+          enddo
+
+          ! calculate dtdzf(2) from avg dqdz at top for last proc
+          if(ise .eq. numprocs-1) then
+            dtdzf(2) = 0.0
+            do iy=iys,iye
+            do ix=1,nnx
+              dtdzf(2) = dtdzf(2) + (t(ix,iy,2,nnz) -
+     +                   t(ix,iy,2,nnz-1))*dzu_i(nnz)
+            enddo
+            enddo
+            dtdzf(2) = dtdzf(2)*fnxy
+            call mpi_sum_xy(dtdzf(2),myid,iss,ise,1)
+          end if
+
+      else  !switch the case (cases 5, 6, 7 are defined above)
 
 
       if (icase.eq.3) then
@@ -10679,6 +10770,11 @@ c
       end if
       end if 
 
+      ! Rodrigo's idealized case
+      if (icase.eq.7) then
+         ! need to add if clause for tsfcc heat flux
+         surf_rho = surf_p/Rd/tsfcc(1)
+      end if
 
 
       if (iexner.eq.1) then

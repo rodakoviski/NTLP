@@ -2447,6 +2447,23 @@ CONTAINS
 
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
 
+   elseif (inewpart.eq.7) then !Rodrigo's idealized case: C-FOG accumulation mode only
+
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*(zi-zw1) + zw1
+      xp_init = (/xv,yv,zv/)
+
+      S = 0.5
+      M = -1.95
+      kappa_s = 0.6
+      mult = mult_init
+      
+      !With these parameters, get m_s and rad_init from distribution
+      call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
+
    end if
 
   end subroutine new_particle
@@ -2784,6 +2801,27 @@ CONTAINS
                call destroy_particle
                num_destroy = num_destroy + 1
    
+               !With these parameters, get m_s and rad_init from distribution
+               call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+
+               call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+
+          elseif (ireintro.eq.1 .and. inewpart.eq.7) then !Rodrigo's idealized case
+
+               xv = ran2(iseed)*(xmax-xmin) + xmin
+               yv = ran2(iseed)*(ymax-ymin) + ymin
+               zv = ran2(iseed)*(zi-zw1) + zw1
+               xp_init = (/xv,yv,zv/)
+
+               S = 0.5
+               M = -1.95
+               kappa_s = 0.6
+               mult = mult_init
+
+               ! destroy old particle before creating new one
+               call destroy_particle
+               num_destroy = num_destroy + 1
+
                !With these parameters, get m_s and rad_init from distribution
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
